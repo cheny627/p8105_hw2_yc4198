@@ -1,0 +1,158 @@
+---
+title: "Homework2"
+author: "Yining Chen"
+date: "2022-10-04"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r,message=FALSE}
+library(dplyr)
+library(tidyverse)
+```
+
+## Problem 1
+```{r}
+trans_ent = 
+  read_csv(
+    "NYC_Transit_Subway_Entrance_And_Exit_Data.csv",
+    col_types = cols(Route8 = "c", Route9 = "c", Route10 = "c", Route11 = "c")) %>% 
+  janitor::clean_names() %>% 
+  select(
+    line, station_name, station_latitude, station_longitude, 
+    starts_with("route"), entry, exit_only, vending, entrance_type, 
+    ada) %>% 
+  mutate(entry = ifelse(entry == "YES", TRUE, FALSE))
+```
+
+As it stands, these data are not "tidy": route number should be a variable, as should route. That is, to obtain a tidy dataset we would need to convert `route` variables from wide to long format. This will be useful when focusing on specific routes, but may not be necessary when considering questions that focus on station-level variables. 
+
+The following code chunk selects station name and line, and then uses `distinct()` to obtain all unique combinations. As a result, the number of rows in this dataset is the number of unique stations.
+
+```{r}
+nrow(trans_ent %>% 
+  select(station_name, line) %>% 
+  distinct)
+```
+
+The next code chunk is similar, but filters according to ADA compliance as an initial step. This produces a dataframe in which the number of rows is the number of ADA compliant stations. 
+
+```{r}
+nrow(trans_ent %>% 
+  filter(ada == TRUE) %>% 
+  select(station_name, line) %>% 
+  distinct)
+```
+
+To compute the proportion of station entrances / exits without vending allow entrance, we first exclude station entrances that do not allow vending. Then, we focus on the `entry` variable -- this logical, so taking the mean will produce the desired proportion (recall that R will coerce logical to numeric in cases like this).
+
+```{r}
+trans_ent %>% 
+  filter(vending == "NO") %>% 
+  pull(entry) %>% 
+  mean
+```
+
+Lastly, we write a code chunk to identify stations that serve the A train, and to assess how many of these are ADA compliant. As a first step, we tidy the data as alluded to previously; that is, we convert `route` from wide to long format. After this step, we can use tools from previous parts of the question (filtering to focus on the A train, and on ADA compliance; selecting and using `distinct` to obtain dataframes with the required stations in rows).
+
+```{r}
+nrow(trans_ent %>% 
+  pivot_longer(
+    route1:route11,
+    names_to = "route_num",
+    values_to = "route") %>% 
+  filter(route == "A") %>% 
+  select(station_name, line) %>% 
+  distinct)
+
+nrow(trans_ent %>% 
+  pivot_longer(
+    route1:route11,
+    names_to = "route_num",
+    values_to = "route") %>% 
+  filter(route == "A", ada == TRUE) %>% 
+  select(station_name, line) %>% 
+  distinct)
+```
+
+## Question 2
+```{r,warning=FALSE,message=FALSE}
+library(readxl)
+trash_wheel= read_excel("Trash Wheel Collection Data.xlsx",sheet = 1)
+professor_wheel = read_excel("Trash Wheel Collection Data.xlsx",sheet = 2)
+```
+
+```{r}
+trash_wheel <-  trash_wheel%>%select(-15,-16)%>% mutate(`Sports Balls` = as.integer(round(`Sports Balls`, digits = 0)))%>% mutate(type="trash")
+
+trash_wheel <- trash_wheel[!(is.na(trash_wheel$Dumpster) | trash_wheel$Dumpster==""), ]
+
+professor_wheel <- professor_wheel[!(is.na(professor_wheel$Dumpster) | professor_wheel$Dumpster==""), ]
+
+professor_wheel <- professor_wheel%>%mutate(type="professor")%>%mutate(`Sports Balls` =0)
+```
+
+```{r}
+full_data <- rbind(trash_wheel, professor_wheel)
+sum(full_data%>%filter(type=="professor")%>%select(`Weight (tons)`))
+sum(full_data%>%filter(Year == 2020)%>%select(`Sports Balls`) )
+```
+The Mr.Trash Wheel dataset contains `r nrow(trash_wheel)` observations and `r ncol(trash_wheel)`  columns after cleaning. It includes 15 variables which are `r names(trash_wheel)`. 
+
+The Professor Trash Wheel dataset contains `r nrow(professor_wheel)` observations and `r ncol(professor_wheel)`  columns after cleaning. It includes 15 variables which are `r names(professor_wheel)`.
+
+The merged dataset contains `r nrow(full_data)` observations and `r ncol(full_data)`  columns after cleaning. It includes 15 variables which are `r names(full_data)`.
+
+The total weight of trash collected by Professor Trash Wheel is 190.12 tons. 
+The total number of sports balls collected by Mr. Trash Wheel in 2020 is 856.
+
+
+## Question 3
+```{r}
+pols <- read.csv("fivethirtyeight_datasets/pols-month.csv")
+unemploy<-read.csv("fivethirtyeight_datasets/unemployment.csv")
+snp<- read.csv("fivethirtyeight_datasets/snp.csv")
+```
+
+```{r}
+pols<-separate(pols, col=mon, into=c('year', 'month','day'), sep='-')
+pols$month <- month.abb[as.numeric(pols$month)]
+pols <- pols %>% mutate(president = ifelse(prez_gop== 1, "gop", "dem"))%>%
+  select(-c("prez_gop","prez_dem","day"))
+```
+
+```{r}
+snp$date <-lubridate::parse_date_time2(snp$date,orders = "mdy",cutoff_2000 = 23)
+snp<-separate(snp, col=date, into=c("year",'month','day'), sep='-')
+snp$month <- month.abb[as.numeric(snp$month)]
+snp <- snp%>% select(-c("day"))
+```
+
+```{r}
+unemploy <- unemploy %>% 
+  pivot_longer(
+    Jan:Dec,
+    names_to = "month",
+    values_to = "unemployment_rate")%>%
+  mutate(year = as.character(Year))%>%
+  select(-c("Year"))
+```
+
+```{r}
+merge_data = 
+  full_join(snp, pols, by = c("year" = "year", "month" = "month"))
+merge_data = 
+  full_join(merge_data, unemploy, by = c("year" = "year", "month" = "month"))
+```
+
+The pols-month dataset contains `r nrow(pols)` rows and `r ncol(pols)`  columns after cleaning. It includes 9 variables which are `r names(pols)`. The year ranges from `r range(pols$year)[1]` to `r range(pols$year)[2]`.
+
+The snp dataset contains `r nrow(snp)` rows and `r ncol(snp)`  columns after cleaning. It includes 3 variables which are `r names(snp)`. The year ranges from `r range(snp$year)[1]` to `r range(snp$year)[2]`.
+
+The unemployment data contains `r nrow(unemploy)` rows and `r ncol(unemploy)`  columns after cleaning. It includes 3 variables which are `r names(unemploy)`. The year ranges from `r range(unemploy$year)[1]` to `r range(unemploy$year)[2]`.
+
+The resulting dataset contains `r nrow(merge_data)` rows and `r ncol(merge_data)`  columns after cleaning. It includes 11 variables which are `r names(merge_data)`. The year ranges from `r range(merge_data$year)[1]` to `r range(merge_data$year)[2]`.
+
